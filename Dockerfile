@@ -1,4 +1,4 @@
-FROM ubuntu:18.04
+FROM ubuntu:18.04 as builder
 
 ENV USER cardano
 ENV HOME /home/${USER}
@@ -53,10 +53,34 @@ RUN git clone https://github.com/input-output-hk/cardano-node.git \
     && cd cardano-node \
     && git fetch --all --tags \
     && git tag \
-    && git checkout tags/1.18.0 \
+    && git checkout tags/${CARDANO_NODE_TAG} \
     && cabal build all
 
 RUN cp -p ${CARDANO_WS}/dist-newstyle/build/x86_64-linux/ghc-8.6.5/cardano-node-${CARDANO_NODE_TAG}/x/cardano-node/build/cardano-node/cardano-node ${LOCAL_BIN} \
     && cp -p ${CARDANO_WS}/dist-newstyle/build/x86_64-linux/ghc-8.6.5/cardano-cli-${CARDANO_NODE_TAG}/x/cardano-cli/build/cardano-cli/cardano-cli ${LOCAL_BIN}
+
+FROM ubuntu:18.04
+
+ENV USER cardano
+ENV HOME /home/${USER}
+ENV LOCAL_BIN ${HOME}/local/bin/
+
+COPY --from=builder /usr/local/lib /usr/local/lib
+
+ENV LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH"
+ENV PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH"
+
+RUN groupadd -r ${USER} \
+    && useradd -r -g ${USER} ${USER} \
+    && mkdir ${HOME} \
+    && chown -R ${USER}:${USER} ${HOME}
+
+WORKDIR ${HOME}
+
+USER ${USER}
+
+COPY --from=builder ${LOCAL_BIN} ${LOCAL_BIN}
+
+ENV PATH="${LOCAL_BIN}:$PATH"
 
 CMD ["cardano-cli", "--version"]
